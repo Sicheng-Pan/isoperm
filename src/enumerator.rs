@@ -1,7 +1,7 @@
-use crate::statement::{Constraint, Statement, Variable};
+use crate::statement::{Constraint, new_statement, Statement, Variable};
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::hash::Hash;
-use itertools::Itertools;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Enumerator {
@@ -11,15 +11,11 @@ pub(crate) struct Enumerator {
 
 impl Enumerator {
     pub(crate) fn new<T: Eq + Hash>(
-        left: (Vec<Constraint>, &HashMap<Variable, T>),
-        right: (Vec<Constraint>, &HashMap<Variable, T>),
-    ) -> Result<Enumerator, String> {
-        let (left_constraints, left_variables) = left;
-        let (right_constraints, right_variables) = right;
-        let left_statement = left_constraints
-            .into_iter()
-            .map(|c| (c.argument_types(left_variables), c))
-            .into_group_map();
+        left_constraints: Vec<Constraint>, left_variables: &HashMap<Variable, T>,
+        right_constraints: Vec<Constraint>, right_variables: &HashMap<Variable, T>,
+    ) -> Result<Self, String> {
+        let (left_statement, left_constraint_types) = new_statement(left_constraints, left_variables)?;
+        let (right_statement, right_constraint_types) = new_statement(right_constraints, right_variables)?;
         todo!()
     }
 }
