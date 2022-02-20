@@ -1,6 +1,7 @@
-use itertools::Itertools;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
+
+use itertools::Itertools;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum Variable {
@@ -9,7 +10,7 @@ pub(crate) enum Variable {
     Local(usize),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct Constraint(usize, Vec<Variable>);
 
 impl Constraint {
@@ -25,7 +26,8 @@ impl Constraint {
         &self.1
     }
 
-    pub(crate) fn argument_types<'s, T: Eq + Hash>(
+    // Lookup argument types given the types of variables.
+    fn argument_types<'s, T: Eq + Hash>(
         &self,
         variable_type: &'s HashMap<Variable, T>,
     ) -> Result<Vec<&'s T>, String> {
@@ -40,40 +42,18 @@ impl Constraint {
     }
 }
 
-impl PartialEq for Constraint {
-    fn eq(&self, other: &Self) -> bool {
-        &self.0 == &other.0
-    }
-}
-
-impl Eq for Constraint {}
-
-impl Hash for Constraint {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        Hash::hash(&self.0, state)
-    }
-}
-
-pub(crate) type Statement = HashMap<Constraint, Vec<Constraint>>;
-
-pub(crate) fn new_statement<T: Eq + Hash>(
+// Group constraints by their signatures and argument types.
+pub(crate) fn group_constraints<T: Eq + Hash>(
     constraints: Vec<Constraint>,
     variables: &HashMap<Variable, T>,
-) -> Result<(Statement, HashMap<Constraint, Vec<&T>>), String> {
-    constraints
+) -> Result<HashMap<(usize, Vec<&T>), Vec<Constraint>>, String> {
+    Ok(constraints
         .into_iter()
-        .map(|c| c.argument_types(variables).map(|tys| (c, tys)))
+        .map(|c| {
+            c.argument_types(variables)
+                .map(|tys| ((c.signature(), tys), c))
+        })
         .collect::<Result<Vec<_>, String>>()?
         .into_iter()
-        .into_group_map_by(|(c, _)| c.clone())
-        .into_iter()
-        .map(|(s, cts)| {
-            let (cs, mut ts): (Vec<_>, Vec<_>) = cts.into_iter().unzip();
-            ts.iter()
-                .all_equal()
-                .then(|| ((s.clone(), cs), (s.clone(), ts.pop().unwrap())))
-                .ok_or(format!("Constraint {} has conflicting types.", s.signature()))
-        })
-        .collect::<Result<Vec<_>, String>>()
-        .map(|ct| ct.into_iter().unzip())
+        .into_group_map())
 }
