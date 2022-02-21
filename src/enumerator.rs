@@ -7,37 +7,153 @@ use itertools::{Itertools, zip};
 use crate::statement::{Constraint, group_constraints, Variable};
 
 #[derive(Clone, Debug)]
-pub(crate) struct StatementEnumerator<I: Iterator<Item=Vec<Variable>>> {
+pub(crate) struct StatementEnumerator {
     environment: BiMap<Variable, Variable>,
-    focus: HashSet<Variable>,
+    local: Vec<(Vec<Variable>, Vec<Variable>)>,
     group: Vec<GroupEnumerator>,
-    unconfined: Option<I>,
+    unconfined: Option<Vec<GroupEnumerator>>,
+    stage: Option<usize>,
 }
 
-impl<I: Iterator<Item=Vec<Variable>>> StatementEnumerator<I> {
+impl StatementEnumerator {
     pub(crate) fn new<T: Eq + Hash>(
-        left_constraints: Vec<Constraint>,
-        left_variables: &HashMap<Variable, T>,
-        right_constraints: Vec<Constraint>,
-        right_variables: &HashMap<Variable, T>,
+        source_constraints: Vec<Constraint>,
+        source_variables: &HashMap<Variable, T>,
+        target_constraints: Vec<Constraint>,
+        target_variables: &HashMap<Variable, T>,
     ) -> Result<Self, String> {
-        // TODO: CHECK VARIABLES
-        let left_groups = group_constraints(left_constraints, left_variables)?;
-        let right_groups = group_constraints(right_constraints, right_variables)?;
-        let _ = left_groups
+        // Assume that variables with the same name have the same type.
+        // Introduce all global variables to the environment.
+        let environment = source_variables
+            .iter()
+            .chain(target_variables.iter())
+            .filter_map(|(&v, _)| match v {
+                Variable::Global(_) => Some((v, v)),
+                _ => None,
+            })
+            .collect();
+        // Collect local variables.
+        let local = Variable::group_local_by_type(source_variables)
             .into_iter()
-            .chain(right_groups.into_iter())
+            .chain(Variable::group_local_by_type(target_variables))
+            .into_group_map()
+            .into_iter()
+            .map(|(_, v)| {
+                v.into_iter()
+                    .collect_tuple()
+                    .filter(|(source, target)| source.len() == target.len())
+                    .ok_or(String::from("Local variable mismatch."))
+            })
+            .collect::<Result<_, _>>()?;
+        // Transform constraint groups to enumerators.
+        let source_groups = group_constraints(source_constraints, source_variables)?;
+        let target_groups = group_constraints(target_constraints, target_variables)?;
+        let group = source_groups
+            .into_iter()
+            .chain(target_groups.into_iter())
             .into_group_map()
             .into_iter()
             .map(|(k, v)| {
                 v.into_iter()
                     .collect_tuple()
-                    .ok_or(format!("Constraint {:?} has no matching group.", k.0))
-                    .map(|(l, r)| GroupEnumerator::new(l, r))
+                    .filter(|(source, target)| source.len() == target.len())
+                    .ok_or(format!("Constraint {:?} mismatch.", k.0))
+                    .map(|(s, t)| GroupEnumerator::new(s, t))
             })
-            .collect::<Result<Vec<_>, String>>()?;
-        todo!()
-        // Introduce all global variables to the environment.
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            environment,
+            local,
+            group,
+            unconfined: None,
+            stage: Some(0),
+        })
+    }
+
+    // Match constraint groups if needed and check if they are matched.
+    fn advance_group(&mut self) -> bool {
+        if let Some(mut index) = self.stage {
+            while let Some(focus) = self.group.get_mut(index) {
+                if focus.advance(&mut self.environment) {
+                    index += 1;
+                } else if index == 0 {
+                    self.stage = None;
+                    return false;
+                } else {
+                    focus.reset(&mut self.environment);
+                    index -= 1;
+                }
+            }
+            self.stage = Some(index);
+            true
+        } else {
+            false
+        }
+    }
+
+    // Generate unconfined groups if needed, and check if there is one.
+    fn generate_unconfined(&mut self) -> bool {
+        match (self.stage, &self.unconfined) {
+            (_, Some(_)) => true,
+            (Some(index), None) if index == self.group.len() => {
+                self.unconfined = Some(
+                    self.local
+                        .clone()
+                        .into_iter()
+                        .map(|(s, t)| {
+                            let (source, target) = s
+                                .into_iter()
+                                .filter(|u| !self.environment.contains_left(u))
+                                .zip(
+                                    t.into_iter()
+                                        .filter(|v| !self.environment.contains_right(v)),
+                                )
+                                .map(|(s, t)| {
+                                    (Constraint::new(0, vec![s]), Constraint::new(0, vec![t]))
+                                })
+                                .unzip();
+                            GroupEnumerator::new(source, target)
+                        })
+                        .collect(),
+                );
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn advance_unconfined(&mut self) -> bool {
+        if let (Some(mut index), Some(free)) = (self.stage, &mut self.unconfined) {
+            while let Some(focus) = free.get_mut(index - self.group.len()) {
+                if focus.advance(&mut self.environment) {
+                    index += 1;
+                } else if index == self.group.len() {
+                    self.stage = (index > 0).then(|| index - 1);
+                    self.unconfined = None;
+                    return false;
+                } else {
+                    focus.reset(&mut self.environment);
+                    index -= 1;
+                }
+            }
+            self.stage = Some(index);
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl Iterator for StatementEnumerator {
+    type Item = BiMap<Variable, Variable>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.stage.is_some() {
+            if self.advance_group() && self.generate_unconfined() && self.advance_unconfined() {
+                return Some(self.environment.clone());
+            }
+        }
+        None
     }
 }
 
@@ -50,22 +166,22 @@ struct GroupEnumerator {
 }
 
 impl GroupEnumerator {
-    fn new(source_group: Vec<Constraint>, target_group: Vec<Constraint>) -> Result<Self, String> {
-        (source_group.len() == target_group.len())
-            .then(|| Self {
-                choices: vec![target_group.clone()],
-                stage: Vec::new(),
-                source: source_group,
-                target: target_group.into_iter().collect(),
-            })
-            .ok_or(String::from("Constraint groups have mismatched length."))
+    fn new(source_group: Vec<Constraint>, target_group: Vec<Constraint>) -> Self {
+        Self {
+            choices: vec![target_group.clone()],
+            stage: Vec::new(),
+            source: source_group,
+            target: target_group.into_iter().collect(),
+        }
     }
 
     // Initialize the group enumerator and remove the bindings it created in the environment.
-    fn initialize(&mut self, environment: &mut BiMap<Variable, Variable>) {
+    fn reset(&mut self, environment: &mut BiMap<Variable, Variable>) {
         self.stage.drain(..).for_each(|(focus, commit)| {
             self.target.insert(focus);
-            commit.left_values().for_each(|t| { environment.remove_by_left(t); });
+            commit.left_values().for_each(|t| {
+                environment.remove_by_left(t);
+            });
         });
         self.choices.clear();
         self.choices.push(self.target.clone().into_iter().collect());
@@ -110,7 +226,9 @@ impl GroupEnumerator {
                 self.choices.pop();
                 if let Some((focus, commit)) = self.stage.pop() {
                     self.target.insert(focus);
-                    commit.left_values().for_each(|t| { environment.remove_by_left(t); });
+                    commit.left_values().for_each(|t| {
+                        environment.remove_by_left(t);
+                    });
                 }
             }
         }

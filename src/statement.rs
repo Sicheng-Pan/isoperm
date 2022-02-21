@@ -10,6 +10,20 @@ pub(crate) enum Variable {
     Local(usize),
 }
 
+impl Variable {
+    pub(crate) fn group_local_by_type<T: Eq + Hash>(
+        variables: &HashMap<Variable, T>,
+    ) -> HashMap<&T, Vec<Variable>> {
+        variables
+            .iter()
+            .filter_map(|(&v, t)| match v {
+                Variable::Local(_) => Some((t, v)),
+                _ => None,
+            })
+            .into_group_map()
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct Constraint(usize, Vec<Variable>);
 
@@ -47,13 +61,12 @@ pub(crate) fn group_constraints<T: Eq + Hash>(
     constraints: Vec<Constraint>,
     variables: &HashMap<Variable, T>,
 ) -> Result<HashMap<(usize, Vec<&T>), Vec<Constraint>>, String> {
-    Ok(constraints
+    constraints
         .into_iter()
         .map(|c| {
             c.argument_types(variables)
                 .map(|tys| ((c.signature(), tys), c))
         })
-        .collect::<Result<Vec<_>, String>>()?
-        .into_iter()
-        .into_group_map())
+        .collect::<Result<Vec<_>, String>>()
+        .map(|group| group.into_iter().into_group_map())
 }
