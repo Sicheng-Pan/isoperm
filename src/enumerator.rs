@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 use bimap::BiMap;
-use itertools::{Itertools, zip};
+use itertools::{zip, Itertools};
 
-use crate::statement::{Constraint, group_constraints, Variable};
+use crate::statement::{group_constraints, Constraint, Variable};
 
 #[derive(Clone, Debug)]
 pub(crate) struct StatementEnumerator {
@@ -100,19 +100,15 @@ impl StatementEnumerator {
                     self.local
                         .clone()
                         .into_iter()
-                        .map(|(s, t)| {
-                            let (source, target) = s
+                        .filter_map(|(s, t)| {
+                            let source_remaining =  s
                                 .into_iter()
-                                .filter(|u| !self.environment.contains_left(u))
-                                .zip(
-                                    t.into_iter()
-                                        .filter(|v| !self.environment.contains_right(v)),
-                                )
-                                .map(|(s, t)| {
-                                    (Constraint::new(0, vec![s]), Constraint::new(0, vec![t]))
-                                })
-                                .unzip();
-                            GroupEnumerator::new(source, target)
+                                .filter(|v| !self.environment.contains_right(v))
+                                .map(|v| Constraint::new(0, vec![v])).collect_vec();
+                            let target_remaining = t.into_iter()
+                                .filter(|v| !self.environment.contains_left(v))
+                                .map(|v| Constraint::new(0, vec![v])).collect_vec();
+                            (!source_remaining.is_empty() && !target_remaining.is_empty()).then(|| GroupEnumerator::new(source_remaining, target_remaining))
                         })
                         .collect(),
                 );
@@ -137,7 +133,7 @@ impl StatementEnumerator {
                     index -= 1;
                 }
             }
-            self.stage = Some(index);
+            self.stage = Some(index - 1);
             true
         } else {
             false
