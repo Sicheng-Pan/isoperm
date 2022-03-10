@@ -5,7 +5,15 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::hash::Hash;
 
-// The wrapper variable enum.
+/// # The wrapper variable enum.
+/// There are three types of variables:
+/// - Expression: An expression is considered to have unknown value. It could be
+///   matched to anything. It is not considered as a concrete variable, as a
+///   result of which it will not bind to anything.
+/// - Global: An global variable is considered to have known value. It could
+///   only match to itself and binds to itself.
+/// - Local: An local variable is considered to have unknown value. It could
+///   match and bind to another local variable of the same type.
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub enum Var<U, V = U, W = U>
 where
@@ -36,7 +44,11 @@ where
     }
 }
 
-// The wrapper permutation struct.
+/// # The wrapper permutation struct.
+/// In order to construct an iterator of all potential permutations, first
+/// construct an instance of `Isoperm` class by provide the two
+/// bags of constraints and the variables used by each of them. Then call
+/// `result()` to get the actual iterator.
 pub struct Isoperm<U, V = U, W = U>
 where
     U: Eq + Hash + PartialEq,
@@ -88,11 +100,7 @@ where
             target_native_constraints,
             &target_types,
         )?;
-        Ok(Self {
-            source_translation,
-            target_translation,
-            permutation,
-        })
+        Ok(Self { source_translation, target_translation, permutation })
     }
 
     fn transform_variables<T>(
@@ -123,23 +131,19 @@ where
         R: Eq + Hash,
         S: IntoIterator<Item = (R, Vec<Var<U, V, W>>)>,
     {
-        constraints
-            .into_iter()
-            .try_fold(Vec::new(), |mut transformed, (signature, arguments)| {
-                arguments
-                    .into_iter()
-                    .map(|v| variables.get_by_right(&v).map(|vl| vl.clone()))
-                    .collect::<Option<_>>()
-                    .map(|vs| {
-                        let frame = record.len();
-                        transformed.push(Constraint::new(
-                            *record.entry(signature).or_insert(frame),
-                            vs,
-                        ));
-                        transformed
-                    })
-                    .ok_or(String::from("Undeclared variable in constraint."))
-            })
+        constraints.into_iter().try_fold(Vec::new(), |mut transformed, (signature, arguments)| {
+            arguments
+                .into_iter()
+                .map(|v| variables.get_by_right(&v).map(|vl| vl.clone()))
+                .collect::<Option<_>>()
+                .map(|vs| {
+                    let frame = record.len();
+                    transformed
+                        .push(Constraint::new(*record.entry(signature).or_insert(frame), vs));
+                    transformed
+                })
+                .ok_or(String::from("Undeclared variable in constraint."))
+        })
     }
 
     fn split_mapping<T>(
@@ -148,12 +152,10 @@ where
     where
         T: Eq + Hash,
     {
-        translation
-            .into_iter()
-            .map(|((vl, t), vr)| ((vl.clone(), t), (vl, vr)))
-            .unzip()
+        translation.into_iter().map(|((vl, t), vr)| ((vl.clone(), t), (vl, vr))).unzip()
     }
 
+    /// Returns the iterator of all possible permutations.
     pub fn result(&mut self) -> Isopermutation<U, V, W> {
         Isopermutation {
             source: &self.source_translation,
@@ -163,7 +165,7 @@ where
     }
 }
 
-// The wrapper permutation iterator struct.
+/// The wrapper permutation iterator struct.
 pub struct Isopermutation<'t, U, V = U, W = U>
 where
     U: Eq + Hash + PartialEq,
@@ -188,10 +190,7 @@ where
             binding
                 .into_iter()
                 .map(|(t, s)| {
-                    (
-                        self.target.get_by_left(&t).unwrap(),
-                        self.source.get_by_left(&s).unwrap(),
-                    )
+                    (self.target.get_by_left(&t).unwrap(), self.source.get_by_left(&s).unwrap())
                 })
                 .collect()
         })

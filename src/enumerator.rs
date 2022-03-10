@@ -61,13 +61,7 @@ impl StatementEnumerator {
                     .map(|(s, t)| GroupEnumerator::new(s, t))
             })
             .collect::<Result<_, _>>()?;
-        Ok(Self {
-            environment,
-            local,
-            group,
-            unconfined: None,
-            stage: Some(0),
-        })
+        Ok(Self { environment, local, group, unconfined: None, stage: Some(0) })
     }
 
     // Match constraint groups if needed and check if they are matched.
@@ -101,14 +95,18 @@ impl StatementEnumerator {
                         .clone()
                         .into_iter()
                         .filter_map(|(s, t)| {
-                            let source_remaining =  s
+                            let source_remaining = s
                                 .into_iter()
                                 .filter(|v| !self.environment.contains_right(v))
-                                .map(|v| Constraint::new(0, vec![v])).collect_vec();
-                            let target_remaining = t.into_iter()
+                                .map(|v| Constraint::new(0, vec![v]))
+                                .collect_vec();
+                            let target_remaining = t
+                                .into_iter()
                                 .filter(|v| !self.environment.contains_left(v))
-                                .map(|v| Constraint::new(0, vec![v])).collect_vec();
-                            (!source_remaining.is_empty() && !target_remaining.is_empty()).then(|| GroupEnumerator::new(source_remaining, target_remaining))
+                                .map(|v| Constraint::new(0, vec![v]))
+                                .collect_vec();
+                            (!source_remaining.is_empty() && !target_remaining.is_empty())
+                                .then(|| GroupEnumerator::new(source_remaining, target_remaining))
                         })
                         .collect(),
                 );
@@ -172,7 +170,8 @@ impl GroupEnumerator {
         }
     }
 
-    // Reset the group enumerator and remove the bindings it created in the environment.
+    // Reset the group enumerator and remove the bindings it created in the
+    // environment.
     fn reset(&mut self, environment: &mut BiMap<Variable, Variable>) {
         self.stage.drain(..).for_each(|(focus, commit)| {
             self.target.insert(focus);
@@ -184,7 +183,8 @@ impl GroupEnumerator {
         self.choices.push(self.target.clone().into_iter().collect());
     }
 
-    // Find the succeeding bindings for the group and commit them to the environment.
+    // Find the succeeding bindings for the group and commit them to the
+    // environment.
     fn advance(&mut self, environment: &mut BiMap<Variable, Variable>) -> bool {
         use Variable::*;
         while let Some(candidates) = self.choices.last_mut() {
@@ -195,8 +195,9 @@ impl GroupEnumerator {
                     .filter(|&bind| !matches!(bind, (&Expr(_), _) | (_, &Expr(_))))
                     .filter_map(|(u, v)| {
                         // Assume that global variables are self-bind in the environment
-                        // Some(Some((u, v))) if u and v are not bind to any variable in the environment
-                        // Some(None) if u or v are already bind to other variables in the environment
+                        // Some(Some((u, v))) if u and v are not bind to any variable in the
+                        // environment Some(None) if u or v are already bind
+                        // to other variables in the environment
                         // None if u and v are already bin to each other in the environment
                         match (environment.get_by_left(u), environment.get_by_right(v)) {
                             (None, None) => Some(Some((*u, *v))),

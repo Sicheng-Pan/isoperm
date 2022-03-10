@@ -8,7 +8,7 @@ fn basic_test() {
         (Local(0), false),
         (Local(1), true),
         (Local(2), true),
-        (Expr(0), true)
+        (Expr(0), true),
     ]
     .into_iter()
     .collect();
@@ -23,11 +23,8 @@ fn basic_test() {
     .collect();
     let source_constraints = vec![("R", vec![Global(0), Local(0)])];
     let target_constraints = vec![("R", vec![Global(0), Local(2)])];
-    let mut isoperm = Isoperm::new(
-        source_constraints,
-        source_variables,
-        target_constraints,
-        target_variables,
-    ).unwrap();
+    let mut isoperm =
+        Isoperm::new(source_constraints, source_variables, target_constraints, target_variables)
+            .unwrap();
     isoperm.result().take(5).for_each(|bind| println!("{:?}", bind));
 }

@@ -47,11 +47,7 @@ impl Constraint {
     ) -> Result<Vec<&'s T>, String> {
         self.1
             .iter()
-            .map(|v| {
-                variable_type
-                    .get(v)
-                    .ok_or(format!("Variable {:?} has undeclared type.", v))
-            })
+            .map(|v| variable_type.get(v).ok_or(format!("Variable {:?} has undeclared type.", v)))
             .collect()
     }
 }
@@ -63,10 +59,7 @@ pub(crate) fn group_constraints<T: Eq + Hash>(
 ) -> Result<HashMap<(usize, Vec<&T>), Vec<Constraint>>, String> {
     constraints
         .into_iter()
-        .map(|c| {
-            c.argument_types(variables)
-                .map(|tys| ((c.signature(), tys), c))
-        })
+        .map(|c| c.argument_types(variables).map(|tys| ((c.signature(), tys), c)))
         .collect::<Result<Vec<_>, String>>()
         .map(|group| group.into_iter().into_group_map())
 }

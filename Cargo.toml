@@ -1,6 +1,6 @@
 [package]
 name = "isoperm"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Sicheng Pan <pansicheng@berkeley.edu>"]
 edition = "2021"
 description = "A simple crate for constrained permutation."
