@@ -131,7 +131,11 @@ impl StatementEnumerator {
                     index -= 1;
                 }
             }
-            self.stage = Some(index - 1);
+            if index == 0 {
+                self.stage = None;
+            } else {
+                self.stage = Some(index - 1);
+            }
             true
         } else {
             false

@@ -14,18 +14,18 @@ use std::hash::Hash;
 ///   only match to itself and binds to itself.
 /// - Local: An local variable is considered to have unknown value. It could
 ///   match and bind to another local variable of the same type.
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Var<U, V = U, W = U>
 where
     U: Eq + Hash + PartialEq,
     V: Eq + Hash + PartialEq,
     W: Eq + Hash + PartialEq,
 {
-    // An expression variable could potentially be matched to anything.
+    /// An expression variable could potentially be matched to anything.
     Expr(W),
-    // A global variable can only be matched to itself.
+    /// A global variable can only be matched to itself.
     Global(V),
-    // A local variable can only be matched to other local variables.
+    /// A local variable can only be matched to other local variables.
     Local(U),
 }
 
@@ -66,6 +66,15 @@ where
     V: Eq + Hash + PartialEq,
     W: Eq + Hash + PartialEq,
 {
+    /// Create a new `Isoperm` instance. The source and target constraints are
+    /// iterators of tuples, where each tuple represents a constraint consists
+    /// of an identifier and a vector of variables used by this constraint. The
+    /// source and target variables are hashmaps from variables to their types.
+    /// The variables need not to show up in the constraints, but the subset of
+    /// global variables in the source variables must be identical to the
+    /// subset of global variables in the target variables. Each permutation
+    /// would be a one-to-one mapping of local variables and global variables.
+    /// Each global variable will be matched to itself.
     pub fn new<R, S, T>(
         source_constraints: S,
         source_variables: HashMap<Var<U, V, W>, T>,
@@ -155,7 +164,9 @@ where
         translation.into_iter().map(|((vl, t), vr)| ((vl.clone(), t), (vl, vr))).unzip()
     }
 
-    /// Returns the iterator of all possible permutations.
+    /// Returns the iterator of all possible permutations. Each permutation is
+    /// represented as a `Bimap`, where the left values are source variables,
+    /// while the right values are target variables.
     pub fn result(&mut self) -> Isopermutation<U, V, W> {
         Isopermutation {
             source: &self.source_translation,
@@ -190,7 +201,7 @@ where
             binding
                 .into_iter()
                 .map(|(t, s)| {
-                    (self.target.get_by_left(&t).unwrap(), self.source.get_by_left(&s).unwrap())
+                    (self.source.get_by_left(&s).unwrap(), self.target.get_by_left(&t).unwrap())
                 })
                 .collect()
         })
