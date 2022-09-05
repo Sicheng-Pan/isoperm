@@ -70,11 +70,8 @@ where
     /// iterators of tuples, where each tuple represents a constraint consists
     /// of an identifier and a vector of variables used by this constraint. The
     /// source and target variables are hashmaps from variables to their types.
-    /// The variables need not to show up in the constraints, but the subset of
-    /// global variables in the source variables must be identical to the
-    /// subset of global variables in the target variables. Each permutation
-    /// would be a one-to-one mapping of local variables and global variables.
-    /// Each global variable will be matched to itself.
+    /// Each permutation would be a one-to-one mapping of local variables and
+    /// global variables. Each global variable will be matched to itself.
     pub fn new<R, S, T>(
         source_constraints: S,
         source_variables: HashMap<Var<U, V, W>, T>,
@@ -201,7 +198,14 @@ where
             binding
                 .into_iter()
                 .map(|(t, s)| {
-                    (self.source.get_by_left(&s).unwrap(), self.target.get_by_left(&t).unwrap())
+                    (
+                        self.source
+                            .get_by_left(&s)
+                            .unwrap_or_else(|| self.target.get_by_left(&s).unwrap()),
+                        self.target
+                            .get_by_left(&t)
+                            .unwrap_or_else(|| self.source.get_by_left(&t).unwrap()),
+                    )
                 })
                 .collect()
         })
